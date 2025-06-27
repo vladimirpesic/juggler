@@ -9,3 +9,5 @@ authors = ["Vladimir Pesic <vladimirpesic@outlook.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/vladimirpesic/juggler"
 description = "AI coding agent"
+
+[workspace.lints]
