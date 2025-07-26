@@ -23,6 +23,8 @@ TraeAgentToolNames = [
     "json_edit_tool",
     "task_done",
     "bash",
+    "context7",
+    "selenium",
 ]
 
 

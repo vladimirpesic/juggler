@@ -1,6 +1,3 @@
-# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
-# SPDX-License-Identifier: MIT
-
 import hashlib
 import json
 import sqlite3
@@ -9,11 +6,50 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from tree_sitter import Node, Parser
-from tree_sitter_languages import get_parser
+from tree_sitter import Parser
+from tree_sitter_language_pack import get_parser
+from utils.constants import LOCAL_STORAGE_PATH
 
-from ...utils.constants import LOCAL_STORAGE_PATH
-from .base import ClassEntry, FunctionEntry, extension_to_language
+from .base import (
+    ClassEntry,
+    ComponentEntry,
+    ContractEntry,
+    EnumEntry,
+    ExtensionEntry,
+    FunctionEntry,
+    GenericTypeEntry,
+    InterfaceEntry,
+    ModuleEntry,
+    NamespaceEntry,
+    StructEntry,
+    TraitEntry,
+    TypeAliasEntry,
+    UnionEntry,
+    extension_to_language,
+)
+from .parsers import (
+    recursive_visit_c,
+    recursive_visit_cpp,
+    recursive_visit_csharp,
+    recursive_visit_dart,
+    recursive_visit_elixir,
+    recursive_visit_gleam,
+    recursive_visit_go,
+    recursive_visit_java,
+    recursive_visit_javascript,
+    recursive_visit_kotlin,
+    recursive_visit_php,
+    recursive_visit_python,
+    recursive_visit_ruby,
+    recursive_visit_rust,
+    recursive_visit_scala,
+    recursive_visit_solidity,
+    recursive_visit_svelte,
+    recursive_visit_swift,
+    recursive_visit_typescript,
+    recursive_visit_vue,
+    recursive_visit_zig,
+)
 
 CKG_DATABASE_PATH = LOCAL_STORAGE_PATH / "ckg"
 CKG_STORAGE_INFO_FILE = CKG_DATABASE_PATH / "storage_info.json"
@@ -44,7 +80,11 @@ def is_git_repository(folder_path: Path) -> bool:
             timeout=5,
         )
         return result.returncode == 0 and result.stdout.strip() == "true"
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -62,7 +102,11 @@ def get_git_status_hash(folder_path: Path) -> str:
 
         # Get the current commit hash
         commit_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=folder_path, capture_output=True, text=True, timeout=5
+            ["git", "rev-parse", "HEAD"],
+            cwd=folder_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
 
         base_hash = commit_result.stdout.strip()
@@ -75,7 +119,11 @@ def get_git_status_hash(folder_path: Path) -> str:
         uncommitted_hash = hashlib.md5(status_result.stdout.encode()).hexdigest()[:8]
         return f"git-dirty-{base_hash}-{uncommitted_hash}"
 
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         # Fallback to file metadata hash if git commands fail
         return get_file_metadata_hash(folder_path)
 
@@ -142,6 +190,132 @@ SQL_LIST = {
         start_line INTEGER NOT NULL,
         end_line INTEGER NOT NULL
     )""",
+    "structs": """
+    CREATE TABLE IF NOT EXISTS structs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        fields TEXT,
+        methods TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "enums": """
+    CREATE TABLE IF NOT EXISTS enums (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        enum_values TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "interfaces": """
+    CREATE TABLE IF NOT EXISTS interfaces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        methods TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "traits": """
+    CREATE TABLE IF NOT EXISTS traits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        methods TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "modules": """
+    CREATE TABLE IF NOT EXISTS modules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        exports TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "namespaces": """
+    CREATE TABLE IF NOT EXISTS namespaces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        members TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "type_aliases": """
+    CREATE TABLE IF NOT EXISTS type_aliases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        target_type TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "components": """
+    CREATE TABLE IF NOT EXISTS components (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        props TEXT,
+        methods TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "contracts": """
+    CREATE TABLE IF NOT EXISTS contracts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        functions TEXT,
+        events TEXT,
+        modifiers TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "extensions": """
+    CREATE TABLE IF NOT EXISTS extensions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        extended_type TEXT,
+        methods TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "unions": """
+    CREATE TABLE IF NOT EXISTS unions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        fields TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
+    "generic_types": """
+    CREATE TABLE IF NOT EXISTS generic_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        type_parameters TEXT,
+        constraints TEXT,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL
+    )""",
 }
 
 
@@ -202,335 +376,6 @@ class CKGDatabase:
         """Update the CKG database."""
         self._construct_ckg()
 
-    def _recursive_visit_python(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        """Recursively visit the Python AST and insert the entries into the database."""
-        if root_node.type == "function_definition":
-            function_name_node = root_node.child_by_field_name("name")
-            if function_name_node:
-                function_entry = FunctionEntry(
-                    name=function_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                if parent_function and parent_class:
-                    # determine if the function is a method of the class or a function within a function
-                    if (
-                        parent_function.start_line >= parent_class.start_line
-                        and parent_function.end_line <= parent_class.end_line
-                    ):
-                        function_entry.parent_function = parent_function.name
-                    else:
-                        function_entry.parent_class = parent_class.name
-                elif parent_function:
-                    function_entry.parent_function = parent_function.name
-                elif parent_class:
-                    function_entry.parent_class = parent_class.name
-                self._insert_entry(function_entry)
-                parent_function = function_entry
-        elif root_node.type == "class_definition":
-            class_name_node = root_node.child_by_field_name("name")
-            if class_name_node:
-                class_body_node = root_node.child_by_field_name("body")
-                class_methods = ""
-                class_entry = ClassEntry(
-                    name=class_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                if class_body_node:
-                    for child in class_body_node.children:
-                        function_definition_node = None
-                        if child.type == "decorated_definition":
-                            function_definition_node = child.child_by_field_name("definition")
-                        elif child.type == "function_definition":
-                            function_definition_node = child
-                        if function_definition_node:
-                            method_name_node = function_definition_node.child_by_field_name("name")
-                            if method_name_node:
-                                parameters_node = function_definition_node.child_by_field_name(
-                                    "parameters"
-                                )
-                                return_type_node = child.child_by_field_name("return_type")
-
-                                class_method_info = method_name_node.text.decode()
-                                if parameters_node:
-                                    class_method_info += f"{parameters_node.text.decode()}"
-                                if return_type_node:
-                                    class_method_info += f" -> {return_type_node.text.decode()}"
-                                class_methods += f"- {class_method_info}\n"
-                class_entry.methods = class_methods.strip() if class_methods != "" else None
-                parent_class = class_entry
-                self._insert_entry(class_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_python(child, file_path, parent_class, parent_function)
-
-    def _recursive_visit_java(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        """Recursively visit the Java AST and insert the entries into the database."""
-        if root_node.type == "class_declaration":
-            class_name_node = root_node.child_by_field_name("name")
-            if class_name_node:
-                class_entry = ClassEntry(
-                    name=class_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                class_body_node = root_node.child_by_field_name("body")
-                class_methods = ""
-                class_fields = ""
-                if class_body_node:
-                    for child in class_body_node.children:
-                        if child.type == "field_declaration":
-                            class_fields += f"- {child.text.decode()}\n"
-                        if child.type == "method_declaration":
-                            method_builder = ""
-                            for method_property in child.children:
-                                if method_property.type == "block":
-                                    break
-                                method_builder += f"{method_property.text.decode()} "
-                            method_builder = method_builder.strip()
-                            class_methods += f"- {method_builder}\n"
-                class_entry.methods = class_methods.strip() if class_methods != "" else None
-                class_entry.fields = class_fields.strip() if class_fields != "" else None
-                parent_class = class_entry
-                self._insert_entry(class_entry)
-        elif root_node.type == "method_declaration":
-            method_name_node = root_node.child_by_field_name("name")
-            if method_name_node:
-                method_entry = FunctionEntry(
-                    name=method_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                if parent_class:
-                    method_entry.parent_class = parent_class.name
-                self._insert_entry(method_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_java(child, file_path, parent_class, parent_function)
-
-    def _recursive_visit_cpp(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        """Recursively visit the C++ AST and insert the entries into the database."""
-        if root_node.type == "class_specifier":
-            class_name_node = root_node.child_by_field_name("name")
-            if class_name_node:
-                class_entry = ClassEntry(
-                    name=class_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                class_body_node = root_node.child_by_field_name("body")
-                class_methods = ""
-                class_fields = ""
-                if class_body_node:
-                    for child in class_body_node.children:
-                        if child.type == "function_definition":
-                            method_builder = ""
-                            for method_property in child.children:
-                                if method_property.type == "compound_statement":
-                                    break
-                                method_builder += f"{method_property.text.decode()} "
-                            method_builder = method_builder.strip()
-                            class_methods += f"- {method_builder}\n"
-                        if child.type == "field_declaration":
-                            child_is_property = True
-                            for child_property in child.children:
-                                if child_property.type == "function_declarator":
-                                    child_is_property = False
-                                    break
-                            if child_is_property:
-                                class_fields += f"- {child.text.decode()}\n"
-                            else:
-                                class_methods += f"- {child.text.decode()}\n"
-                class_entry.methods = class_methods.strip() if class_methods != "" else None
-                class_entry.fields = class_fields.strip() if class_fields != "" else None
-                parent_class = class_entry
-                self._insert_entry(class_entry)
-        elif root_node.type == "function_definition":
-            function_declarator_node = root_node.child_by_field_name("declarator")
-            if function_declarator_node:
-                function_name_node = function_declarator_node.child_by_field_name("declarator")
-                if function_name_node:
-                    function_entry = FunctionEntry(
-                        name=function_name_node.text.decode(),
-                        file_path=file_path,
-                        body=root_node.text.decode(),
-                        start_line=root_node.start_point[0] + 1,
-                        end_line=root_node.end_point[0] + 1,
-                    )
-                    if parent_class:
-                        function_entry.parent_class = parent_class.name
-                    self._insert_entry(function_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_cpp(child, file_path, parent_class, parent_function)
-
-    def _recursive_visit_c(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        """Recursively visit the C AST and insert the entries into the database."""
-        if root_node.type == "function_definition":
-            function_declarator_node = root_node.child_by_field_name("declarator")
-            if function_declarator_node:
-                function_name_node = function_declarator_node.child_by_field_name("declarator")
-                if function_name_node:
-                    function_entry = FunctionEntry(
-                        name=function_name_node.text.decode(),
-                        file_path=file_path,
-                        body=root_node.text.decode(),
-                        start_line=root_node.start_point[0] + 1,
-                        end_line=root_node.end_point[0] + 1,
-                    )
-                    self._insert_entry(function_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_c(child, file_path, parent_class, parent_function)
-
-    def _recursive_visit_typescript(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        if root_node.type == "class_declaration":
-            class_name_node = root_node.child_by_field_name("name")
-            if class_name_node:
-                class_entry = ClassEntry(
-                    name=class_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                methods = ""
-                fields = ""
-                class_body_node = root_node.child_by_field_name("body")
-                if class_body_node:
-                    for child in class_body_node.children:
-                        if child.type == "method_definition":
-                            method_builder = ""
-                            for method_property in child.children:
-                                if method_property.type == "statement_block":
-                                    break
-                                method_builder += f"{method_property.text.decode()} "
-                            method_builder = method_builder.strip()
-                            methods += f"- {method_builder}\n"
-                        elif child.type == "public_field_definition":
-                            fields += f"- {child.text.decode()}\n"
-                class_entry.methods = methods.strip() if methods != "" else None
-                class_entry.fields = fields.strip() if fields != "" else None
-                parent_class = class_entry
-                self._insert_entry(class_entry)
-        elif root_node.type == "method_definition":
-            method_name_node = root_node.child_by_field_name("name")
-            if method_name_node:
-                method_entry = FunctionEntry(
-                    name=method_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                if parent_class:
-                    method_entry.parent_class = parent_class.name
-                self._insert_entry(method_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_typescript(child, file_path, parent_class, parent_function)
-
-    def _recursive_visit_javascript(
-        self,
-        root_node: Node,
-        file_path: str,
-        parent_class: ClassEntry | None = None,
-        parent_function: FunctionEntry | None = None,
-    ):
-        """Recursively visit the JavaScript AST and insert the entries into the database."""
-        if root_node.type == "class_declaration":
-            class_name_node = root_node.child_by_field_name("name")
-            if class_name_node:
-                class_entry = ClassEntry(
-                    name=class_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                methods = ""
-                fields = ""
-                class_body_node = root_node.child_by_field_name("body")
-                if class_body_node:
-                    for child in class_body_node.children:
-                        if child.type == "method_definition":
-                            method_builder = ""
-                            for method_property in child.children:
-                                if method_property.type == "statement_block":
-                                    break
-                                method_builder += f"{method_property.text.decode()} "
-                            method_builder = method_builder.strip()
-                            methods += f"- {method_builder}\n"
-                        elif child.type == "public_field_definition":
-                            fields += f"- {child.text.decode()}\n"
-                class_entry.methods = methods.strip() if methods != "" else None
-                class_entry.fields = fields.strip() if fields != "" else None
-                parent_class = class_entry
-                self._insert_entry(class_entry)
-        elif root_node.type == "method_definition":
-            method_name_node = root_node.child_by_field_name("name")
-            if method_name_node:
-                method_entry = FunctionEntry(
-                    name=method_name_node.text.decode(),
-                    file_path=file_path,
-                    body=root_node.text.decode(),
-                    start_line=root_node.start_point[0] + 1,
-                    end_line=root_node.end_point[0] + 1,
-                )
-                if parent_class:
-                    method_entry.parent_class = parent_class.name
-                self._insert_entry(method_entry)
-
-        if len(root_node.children) != 0:
-            for child in root_node.children:
-                self._recursive_visit_javascript(child, file_path, parent_class, parent_function)
-
     def _construct_ckg(self) -> None:
         """Initialise the code knowledge graph."""
 
@@ -551,7 +396,7 @@ class CKGDatabase:
 
                 language_parser = language_to_parser.get(language)
                 if not language_parser:
-                    language_parser = get_parser(language)
+                    language_parser = get_parser(language)  # type: ignore
                     language_to_parser[language] = language_parser
 
                 tree = language_parser.parse(file.read_bytes())
@@ -559,21 +404,67 @@ class CKGDatabase:
 
                 match language:
                     case "python":
-                        self._recursive_visit_python(root_node, file.absolute().as_posix())
+                        recursive_visit_python(self, root_node, file.absolute().as_posix())
                     case "java":
-                        self._recursive_visit_java(root_node, file.absolute().as_posix())
+                        recursive_visit_java(self, root_node, file.absolute().as_posix())
                     case "cpp":
-                        self._recursive_visit_cpp(root_node, file.absolute().as_posix())
+                        recursive_visit_cpp(self, root_node, file.absolute().as_posix())
                     case "c":
-                        self._recursive_visit_c(root_node, file.absolute().as_posix())
+                        recursive_visit_c(self, root_node, file.absolute().as_posix())
                     case "typescript":
-                        self._recursive_visit_typescript(root_node, file.absolute().as_posix())
+                        recursive_visit_typescript(self, root_node, file.absolute().as_posix())
                     case "javascript":
-                        self._recursive_visit_javascript(root_node, file.absolute().as_posix())
+                        recursive_visit_javascript(self, root_node, file.absolute().as_posix())
+                    case "rust":
+                        recursive_visit_rust(self, root_node, file.absolute().as_posix())
+                    case "go":
+                        recursive_visit_go(self, root_node, file.absolute().as_posix())
+                    case "ruby":
+                        recursive_visit_ruby(self, root_node, file.absolute().as_posix())
+                    case "php":
+                        recursive_visit_php(self, root_node, file.absolute().as_posix())
+                    case "csharp":
+                        recursive_visit_csharp(self, root_node, file.absolute().as_posix())
+                    case "dart":
+                        recursive_visit_dart(self, root_node, file.absolute().as_posix())
+                    case "elixir":
+                        recursive_visit_elixir(self, root_node, file.absolute().as_posix())
+                    case "gleam":
+                        recursive_visit_gleam(self, root_node, file.absolute().as_posix())
+                    case "kotlin":
+                        recursive_visit_kotlin(self, root_node, file.absolute().as_posix())
+                    case "scala":
+                        recursive_visit_scala(self, root_node, file.absolute().as_posix())
+                    case "solidity":
+                        recursive_visit_solidity(self, root_node, file.absolute().as_posix())
+                    case "svelte":
+                        recursive_visit_svelte(self, root_node, file.absolute().as_posix())
+                    case "swift":
+                        recursive_visit_swift(self, root_node, file.absolute().as_posix())
+                    case "vue":
+                        recursive_visit_vue(self, root_node, file.absolute().as_posix())
+                    case "zig":
+                        recursive_visit_zig(self, root_node, file.absolute().as_posix())
                     case _:
                         continue
 
-    def _insert_entry(self, entry: FunctionEntry | ClassEntry) -> None:
+    def _insert_entry(
+        self,
+        entry: FunctionEntry
+        | ClassEntry
+        | StructEntry
+        | EnumEntry
+        | InterfaceEntry
+        | TraitEntry
+        | ModuleEntry
+        | NamespaceEntry
+        | TypeAliasEntry
+        | ComponentEntry
+        | ContractEntry
+        | ExtensionEntry
+        | UnionEntry
+        | GenericTypeEntry,
+    ) -> None:
         """
         Insert entry into db.
 
@@ -587,9 +478,32 @@ class CKGDatabase:
         match entry:
             case FunctionEntry():
                 self._insert_function(entry)
-
             case ClassEntry():
                 self._insert_class(entry)
+            case StructEntry():
+                self._insert_struct(entry)
+            case EnumEntry():
+                self._insert_enum(entry)
+            case InterfaceEntry():
+                self._insert_interface(entry)
+            case TraitEntry():
+                self._insert_trait(entry)
+            case ModuleEntry():
+                self._insert_module(entry)
+            case NamespaceEntry():
+                self._insert_namespace(entry)
+            case TypeAliasEntry():
+                self._insert_type_alias(entry)
+            case ComponentEntry():
+                self._insert_component(entry)
+            case ContractEntry():
+                self._insert_contract(entry)
+            case ExtensionEntry():
+                self._insert_extension(entry)
+            case UnionEntry():
+                self._insert_union(entry)
+            case GenericTypeEntry():
+                self._insert_generic_type(entry)
 
         self._db_connection.commit()
 
@@ -645,8 +559,220 @@ class CKGDatabase:
             ),
         )
 
+    def _insert_struct(self, entry: StructEntry) -> None:
+        """Insert struct entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO structs (name, file_path, body, fields, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.fields,
+                entry.methods,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_enum(self, entry: EnumEntry) -> None:
+        """Insert enum entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO enums (name, file_path, body, enum_values, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.variants,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_interface(self, entry: InterfaceEntry) -> None:
+        """Insert interface entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO interfaces (name, file_path, body, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.methods,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_trait(self, entry: TraitEntry) -> None:
+        """Insert trait entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO traits (name, file_path, body, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.methods,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_module(self, entry: ModuleEntry) -> None:
+        """Insert module entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO modules (name, file_path, body, exports, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.exports,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_namespace(self, entry: NamespaceEntry) -> None:
+        """Insert namespace entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO namespaces (name, file_path, body, members, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.members,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_type_alias(self, entry: TypeAliasEntry) -> None:
+        """Insert type alias entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO type_aliases (name, file_path, body, target_type, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.target_type,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_component(self, entry: ComponentEntry) -> None:
+        """Insert component entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO components (name, file_path, body, props, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.props,
+                entry.methods,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_contract(self, entry: ContractEntry) -> None:
+        """Insert contract entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO contracts (name, file_path, body, functions, events, modifiers, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.functions,
+                entry.events,
+                entry.modifiers,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_extension(self, entry: ExtensionEntry) -> None:
+        """Insert extension entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO extensions (name, file_path, body, extended_type, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.extended_type,
+                entry.methods,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_union(self, entry: UnionEntry) -> None:
+        """Insert union entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO unions (name, file_path, body, fields, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.variants,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
+    def _insert_generic_type(self, entry: GenericTypeEntry) -> None:
+        """Insert generic type entry into db."""
+        self._db_connection.execute(
+            """
+                INSERT INTO generic_types (name, file_path, body, type_parameters, constraints, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry.name,
+                entry.file_path,
+                entry.body,
+                entry.type_parameters,
+                entry.constraints,
+                entry.start_line,
+                entry.end_line,
+            ),
+        )
+
     def query_function(
-        self, identifier: str, entry_type: Literal["function", "class_method"] = "function"
+        self,
+        identifier: str,
+        entry_type: Literal["function", "class_method"] = "function",
     ) -> list[FunctionEntry]:
         """
         Search for a function in the database.
