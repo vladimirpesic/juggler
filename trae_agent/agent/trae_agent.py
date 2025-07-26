@@ -25,6 +25,7 @@ TraeAgentToolNames = [
     "bash",
     "context7",
     "selenium",
+    "ckg",
 ]
 
 

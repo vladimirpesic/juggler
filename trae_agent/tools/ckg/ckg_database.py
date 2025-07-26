@@ -8,8 +8,8 @@ from typing import Literal
 
 from tree_sitter import Parser
 from tree_sitter_language_pack import get_parser
-from utils.constants import LOCAL_STORAGE_PATH
 
+from ...utils.constants import LOCAL_STORAGE_PATH
 from .base import (
     ClassEntry,
     ComponentEntry,
